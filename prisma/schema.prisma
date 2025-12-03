@@ -1,0 +1,104 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String        @id @default(uuid())
+  fullName       String
+  email          String        @unique
+  password       String
+  avatarUrl      String?
+  currency       String        @default("IDR")
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  Wallet         Wallet[]
+  Transaction    Transaction[]
+  Category       Category[]    @relation("UserCategories")
+  Transfer       Transfer[]    @relation("UserTransfers")
+  RefreshToken   RefreshToken?
+}
+
+model Wallet {
+  id        String    @id @default(uuid())
+  userId    String
+  name      String
+  type      String
+  color     String?
+  icon      String?
+  balance   Float     @default(0)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  Transaction Transaction[]
+  TransferFrom Transfer[] @relation("fromWallet")
+  TransferTo   Transfer[] @relation("toWallet")
+}
+
+model Category {
+  id        String   @id @default(uuid())
+  userId    String?  // null = global
+  name      String
+  type      String
+  icon      String?
+  createdAt DateTime @default(now())
+
+  // RELATION BACK TO USER
+  user User? @relation("UserCategories", fields: [userId], references: [id])
+
+  // RELATION BACK TO TRANSACTIONS
+  Transaction Transaction[]
+}
+
+model Transaction {
+  id            String     @id @default(uuid())
+  userId        String
+  walletId      String
+  categoryId    String?
+  type          String
+  amount        Float
+  description   String?
+  attachmentUrl String?
+  date          DateTime
+  createdAt     DateTime   @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+  wallet Wallet @relation(fields: [walletId], references: [id])
+
+  // RELATION FIXED: add name "TransactionCategory"
+  category Category? @relation(fields: [categoryId], references: [id])
+}
+
+model Transfer {
+  id           String   @id @default(uuid())
+  userId       String
+  fromWalletId String
+  toWalletId   String
+  amount       Float
+  description  String?
+  date         DateTime @default(now())
+  createdAt    DateTime @default(now())
+
+  // RELATION FIXED: add name "UserTransfers"
+  user User @relation("UserTransfers", fields: [userId], references: [id])
+
+  fromWallet Wallet @relation("fromWallet", fields: [fromWalletId], references: [id])
+  toWallet   Wallet @relation("toWallet", fields: [toWalletId], references: [id])
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  token     String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
