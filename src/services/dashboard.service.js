@@ -1,11 +1,12 @@
 const prisma = require("../infrastructure/prismaClient");
 
-exports.getSummary = async (userid) => {
+exports.getSummary = async (userId) => {
   // === Date Range ===
   const now = new Date();
   const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-  const lastMonthFirst = new Date(now.getFullYear, now.getMonth - 1, 1);
-  const lastMonthLast = new Date(now.getFullYear, now.getMonth, 0);
+
+  const lastMonthFirst = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const lastMonthLast = new Date(now.getFullYear(), now.getMonth(), 0);
 
   // === Total Net Worth ===
   const wallets = await prisma.wallet.findMany({
@@ -15,7 +16,7 @@ exports.getSummary = async (userid) => {
 
   const netWorth = wallets.reduce((sum, w) => sum + w.balance, 0);
 
-  // === Income and Expense Month ===
+  // === Income & Expense This Month ===
   const trxThisMonth = await prisma.transaction.groupBy({
     by: ["type"],
     _sum: { amount: true },
@@ -31,13 +32,13 @@ exports.getSummary = async (userid) => {
   const expenseThisMonth =
     trxThisMonth.find((t) => t.type === "EXPENSE")?._sum.amount || 0;
 
-  // === Income-Expense Last Month ===
+  // === Income & Expense Last Month ===
   const trxLastMonth = await prisma.transaction.groupBy({
     by: ["type"],
     _sum: { amount: true },
     where: {
       userId,
-      date: { gte: lastMonthFirst, lte: lastMonthFirst },
+      date: { gte: lastMonthFirst, lte: lastMonthLast },
     },
   });
 
@@ -45,7 +46,7 @@ exports.getSummary = async (userid) => {
     trxLastMonth.find((t) => t.type === "INCOME")?._sum.amount || 0;
 
   const lastExpense =
-    trxLastMonth((t) => t.type === "EXPENSE")?._sum.amount || 0;
+    trxLastMonth.find((t) => t.type === "EXPENSE")?._sum.amount || 0;
 
   const diffLastMonth =
     incomeThisMonth - expenseThisMonth - (lastIncome - lastExpense);
@@ -55,6 +56,7 @@ exports.getSummary = async (userid) => {
     by: ["categoryId"],
     _sum: { amount: true },
     where: {
+      userId,
       type: "EXPENSE",
       date: { gte: firstDay, lte: now },
     },
@@ -81,7 +83,7 @@ exports.getSummary = async (userid) => {
     orderBy: { balance: "asc" },
   });
 
-  // === Weekly Trend (Simplified) ===
+  // === Weekly Trend (4 weeks) ===
   const trend = [];
   for (let i = 0; i < 4; i++) {
     const start = new Date(now.getFullYear(), now.getMonth(), i * 7 + 1);
@@ -100,7 +102,6 @@ exports.getSummary = async (userid) => {
     });
   }
 
-  // === Return Final Dashboard Summary ===
   return {
     netWorth,
     incomeThisMonth,

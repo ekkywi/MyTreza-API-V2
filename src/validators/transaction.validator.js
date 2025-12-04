@@ -15,3 +15,13 @@ exports.updateTransactionSchema = Joi.object({
   description: Joi.string().max(500).optional().allow(""),
   date: Joi.date().iso().optional(),
 });
+
+exports.searchTransactionSchema = Joi.object({
+  startDate: Joi.date().optional(),
+  endDate: Joi.date().optional(),
+  type: Joi.string().valid("INCOME", "EXPENSE", "TRANSFER").optional(),
+  walletId: Joi.string().uuid().optional(),
+  categoryId: Joi.string().uuid().optional(),
+  q: Joi.string().allow("").optional(),
+  sort: Joi.string().valid("newest", "olders").optional(),
+});

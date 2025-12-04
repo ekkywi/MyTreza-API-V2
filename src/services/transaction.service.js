@@ -29,7 +29,7 @@ exports.create = async (
         type,
         amount,
         description,
-        date: new Date(date),
+        date: date ? new Date(date) : new Date(),
       },
     });
     // 2. update wallet
@@ -56,4 +56,84 @@ exports.updateReceipt = async (id, receiptUrl) => {
     where: { id },
     data: { attachmentUrl: receiptUrl },
   });
+};
+
+exports.search = async (userId, query) => {
+  const {
+    walletId,
+    categoryId,
+    type,
+    q,
+    startDate,
+    endDate,
+    minAmount,
+    maxAmount,
+    sort,
+    page,
+    limit,
+  } = query;
+
+  const where = { userId };
+
+  // Date Range
+  if (startDate || endDate) {
+    where.date = {};
+    if (startDate) where.date.gte = new Date(startDate);
+    if (endDate) where.date.lte = new Date(endDate);
+  }
+
+  // Wallet Filter
+  if (walletId) where.walletId = walletId;
+
+  // Category Filter
+  if (categoryId) where.categoryId = categoryId;
+
+  // Type Filter
+  if (type) where.type = type;
+
+  // Amount Range
+  if (minAmount || maxAmount) {
+    where.amount = {};
+    if (minAmount) where.amount.gte = Number(minAmount);
+    if (maxAmount) where.amount.lte = Number(maxAmount);
+  }
+
+  // Search Text
+  if (q) {
+    where.OR = [
+      { description: { contains: q, mode: "insensitive" } },
+      { note: { contains: q, mode: "insensitive" } },
+    ];
+  }
+
+  // Sorting
+  let orderBy = { date: "desc" };
+  if (sort === "oldest") orderBy = { date: "asc" };
+  if (sort === "amount-high") orderBy = { amount: "desc" };
+  if (sort === "amount-low") orderBy = { amount: "asc" };
+
+  // Pagination
+  const skip = (page - 1) * limit;
+  const take = limit;
+
+  const [items, total] = await Promise.all([
+    prisma.transaction.findMany({
+      where,
+      include: { wallet: true, category: true },
+      orderBy,
+      skip,
+      take,
+    }),
+    prisma.transaction.count({ where }),
+  ]);
+
+  return {
+    items,
+    meta: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+    },
+  };
 };

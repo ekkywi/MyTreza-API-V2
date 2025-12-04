@@ -2,8 +2,15 @@ const prisma = require("../infrastructure/prismaClient");
 
 exports.create = async (data) => prisma.transaction.create({ data });
 
-exports.findById = async (id) =>
-  prisma.transaction.findUnique({ where: { id } });
+exports.findById = async (id) => {
+  return prisma.transaction.findUnique({
+    where: { id },
+    include: {
+      wallet: true,
+      category: true,
+    },
+  });
+};
 
 exports.list = async ({
   userId,

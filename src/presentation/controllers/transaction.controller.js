@@ -81,3 +81,29 @@ exports.uploadReceipt = async (req, res, next) => {
     next(err);
   }
 };
+
+exports.search = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+
+    const query = {
+      walletId: req.query.walletId,
+      categoryId: req.query.categoryId,
+      type: req.query.type,
+      q: req.query.q,
+      startDate: req.query.startDate,
+      endDate: req.query.endDate,
+      minAmount: req.query.minAmount,
+      maxAmount: req.query.maxAmount,
+      sort: req.query.sort || "newest",
+      page: Number(req.query.page) || 1,
+      limit: Number(req.query.limit) || 20,
+    };
+
+    const result = await transactionService.search(userId, query);
+
+    return success(res, "Search result fetched", result);
+  } catch (err) {
+    next(err);
+  }
+};

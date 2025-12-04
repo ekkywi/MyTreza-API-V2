@@ -5,7 +5,8 @@ exports.summary = async (req, res, next) => {
   try {
     const userId = req.user.id;
     const data = await dashboardService.getSummary(userId);
-    return succees(res, "Dashboard summary fetched", data);
+
+    return success(res, "Dashboard summary fetched", data);
   } catch (err) {
     next(err);
   }
