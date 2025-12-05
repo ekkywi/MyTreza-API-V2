@@ -6,7 +6,7 @@ exports.createTransactionSchema = Joi.object({
   type: Joi.string().valid("INCOME", "EXPENSE").required(),
   amount: Joi.number().positive().required(),
   description: Joi.string().max(500).optional().allow(""),
-  date: Joi.date().iso().required(),
+  date: Joi.date().iso().optional(),
 });
 
 exports.updateTransactionSchema = Joi.object({

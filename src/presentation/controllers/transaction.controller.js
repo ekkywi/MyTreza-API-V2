@@ -54,7 +54,7 @@ exports.update = async (req, res, next) => {
 exports.remove = async (req, res, next) => {
   try {
     await transactionService.remove(req.params.id);
-    return success(res, "Transaction deleted", null, 204);
+    return success(res, "Transaction deleted", null, 200);
   } catch (err) {
     next(err);
   }

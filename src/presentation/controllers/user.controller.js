@@ -3,7 +3,8 @@ const userService = require("../../services/user.service");
 
 exports.getProfile = async (req, res, next) => {
   try {
-    return success(res, "User profile - implement", null);
+    const user = await userService.getProfile(req.user.id);
+    return success(res, "Profil Pengguna", user);
   } catch (err) {
     next(err);
   }
@@ -11,7 +12,8 @@ exports.getProfile = async (req, res, next) => {
 
 exports.updateProfile = async (req, res, next) => {
   try {
-    return success(res, "Update profile - implement", null);
+    const updatedUser = await userService.updateProfile(req.user.id, req.body);
+    return success(res, "Profil berhasil diperbarui", updatedUser);
   } catch (err) {
     next(err);
   }
@@ -19,7 +21,9 @@ exports.updateProfile = async (req, res, next) => {
 
 exports.changePassword = async (req, res, next) => {
   try {
-    return success(res, "Change password - implement", null);
+    const { oldPassword, newPassword } = req.body;
+    await userService.changePassword(req.user.id, oldPassword, newPassword);
+    return success(res, "Password berhasil diperbarui", null);
   } catch (err) {
     next(err);
   }

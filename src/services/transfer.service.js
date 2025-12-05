@@ -2,7 +2,7 @@ const prisma = require("../infrastructure/prismaClient");
 
 exports.create = async (
   userId,
-  { fromWalletId, toWalletId, amount, description, date }
+  { fromWalletId, toWalletId, amount, adminFee = 0, description, date }
 ) => {
   if (fromWalletId === toWalletId)
     throw Object.assign(new Error("Cannot transfer to same wallet"), {
@@ -13,8 +13,15 @@ exports.create = async (
     const to = await tx.wallet.findUnique({ where: { id: toWalletId } });
     if (!from || !to)
       throw Object.assign(new Error("Wallet not found"), { status: 404 });
-    if (from.balance < amount)
-      throw Object.assign(new Error("Insufficient balance"), { status: 400 });
+
+    const totalDeduction = amount + Number(adminFee);
+
+    if (from.balance < totalDeduction)
+      throw Object.assign(
+        new Error("Insufficient balance (including admin fee)"),
+        { status: 400 }
+      );
+
     // 1. create transfer record
     const transfer = await tx.transfer.create({
       data: {
@@ -22,30 +29,38 @@ exports.create = async (
         fromWalletId,
         toWalletId,
         amount,
+        adminFee: Number(adminFee),
         description,
         date: date ? new Date(date) : new Date(),
       },
     });
+
     // 2. update balances
+    // Sender pays amount + adminFee
     await tx.wallet.update({
       where: { id: fromWalletId },
-      data: { balance: from.balance - amount },
+      data: { balance: from.balance - totalDeduction },
     });
+    // Receiver gets ONLY amount
     await tx.wallet.update({
       where: { id: toWalletId },
       data: { balance: to.balance + amount },
     });
-    // 3. create two transactions (optional): expense + income for bookkeeping
+
+    // 3. create transactions for bookkeeping
+    // Expense for Sender: Amount + Fee
     await tx.transaction.create({
       data: {
         userId,
         walletId: fromWalletId,
         type: "EXPENSE",
-        amount,
-        description: `Transfer to ${to.name}`,
+        amount: totalDeduction,
+        description: `Transfer to ${to.name} (Fee: ${adminFee})`,
         date: date ? new Date(date) : new Date(),
       },
     });
+
+    // Income for Receiver: Only Amount
     await tx.transaction.create({
       data: {
         userId,
@@ -56,6 +71,7 @@ exports.create = async (
         date: date ? new Date(date) : new Date(),
       },
     });
+
     return transfer;
   });
 };

@@ -44,7 +44,7 @@ exports.update = async (req, res, next) => {
 exports.remove = async (req, res, next) => {
   try {
     await walletService.remove(req.params.id);
-    return success(res, "Wallet deleted", null, 204);
+    return success(res, "Wallet deleted", null, 200);
   } catch (err) {
     next(err);
   }

@@ -4,6 +4,7 @@ exports.createTransferSchema = Joi.object({
   fromWalletId: Joi.string().uuid().required(),
   toWalletId: Joi.string().uuid().required(),
   amount: Joi.number().positive().required(),
+  adminFee: Joi.number().min(0).optional(),
   description: Joi.string().max(500).optional().allow(""),
   date: Joi.date().iso().optional(),
 }).custom((value, helpers) => {

@@ -1,8 +1,10 @@
 const { success } = require('../../utils/response');
+const categoryService = require('../../services/category.service');
 
 exports.create = async (req, res, next) => {
   try {
-    return success(res, 'Create category - implement', null, 201);
+    const category = await categoryService.create(req.user.id, req.body);
+    return success(res, 'Category created', category, 201);
   } catch (err) {
     next(err);
   }
@@ -10,7 +12,8 @@ exports.create = async (req, res, next) => {
 
 exports.list = async (req, res, next) => {
   try {
-    return success(res, 'List categories - implement', null);
+    const categories = await categoryService.list(req.user.id);
+    return success(res, 'List categories', categories);
   } catch (err) {
     next(err);
   }
@@ -18,7 +21,8 @@ exports.list = async (req, res, next) => {
 
 exports.update = async (req, res, next) => {
   try {
-    return success(res, 'Update category - implement', null);
+    const updated = await categoryService.update(req.params.id, req.body);
+    return success(res, 'Category updated', updated);
   } catch (err) {
     next(err);
   }
@@ -26,7 +30,8 @@ exports.update = async (req, res, next) => {
 
 exports.remove = async (req, res, next) => {
   try {
-    return success(res, 'Delete category - implement', null, 204);
+    await categoryService.remove(req.params.id);
+    return success(res, 'Category deleted', null, 200);
   } catch (err) {
     next(err);
   }

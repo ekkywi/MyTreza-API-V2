@@ -1,6 +1,6 @@
 module.exports = (schema) => (req, res, next) => {
   const data = req.is("multipart/form-data") ? req.body : req.body;
-  const { error } = schema.validate(data, {
+  const { error, value } = schema.validate(data, {
     abortEarly: false,
     stripUnknown: true,
   });
@@ -11,5 +11,6 @@ module.exports = (schema) => (req, res, next) => {
       errors: error.details,
     });
   }
+  req.body = value;
   next();
 };

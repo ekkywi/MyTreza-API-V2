@@ -47,9 +47,82 @@ exports.list = (opts) => trxRepo.list(opts);
 
 exports.detail = (id) => trxRepo.findById(id);
 
-exports.update = async (id, payload) => trxRepo.update(id, payload);
+exports.update = async (id, payload) => {
+  const prisma = require("../infrastructure/prismaClient");
 
-exports.remove = async (id) => trxRepo.remove(id);
+  return prisma.$transaction(async (tx) => {
+    // 1. Get old transaction
+    const oldTrx = await tx.transaction.findUnique({
+      where: { id },
+      include: { wallet: true },
+    });
+    if (!oldTrx)
+      throw Object.assign(new Error("Transaction not found"), { status: 404 });
+
+    // 2. Calculate revert amount (undo old transaction)
+    let walletBalance = oldTrx.wallet.balance;
+    if (oldTrx.type === "INCOME") {
+      walletBalance -= oldTrx.amount;
+    } else {
+      walletBalance += oldTrx.amount;
+    }
+
+    // 3. Apply new transaction effect
+    // Use new values if provided, otherwise use old values
+    const newAmount =
+      payload.amount !== undefined ? payload.amount : oldTrx.amount;
+    const newType = payload.type || oldTrx.type;
+
+    if (newType === "INCOME") {
+      walletBalance += newAmount;
+    } else {
+      walletBalance -= newAmount;
+    }
+
+    // 4. Update wallet balance
+    await tx.wallet.update({
+      where: { id: oldTrx.walletId },
+      data: { balance: walletBalance },
+    });
+
+    // 5. Update transaction record
+    return tx.transaction.update({
+      where: { id },
+      data: payload,
+    });
+  });
+};
+
+exports.remove = async (id) => {
+  const prisma = require("../infrastructure/prismaClient");
+
+  return prisma.$transaction(async (tx) => {
+    // 1. Get transaction to delete
+    const trx = await tx.transaction.findUnique({
+      where: { id },
+      include: { wallet: true },
+    });
+    if (!trx)
+      throw Object.assign(new Error("Transaction not found"), { status: 404 });
+
+    // 2. Revert wallet balance
+    let newBalance = trx.wallet.balance;
+    if (trx.type === "INCOME") {
+      newBalance -= trx.amount;
+    } else {
+      newBalance += trx.amount;
+    }
+
+    // 3. Update wallet
+    await tx.wallet.update({
+      where: { id: trx.walletId },
+      data: { balance: newBalance },
+    });
+
+    // 4. Delete transaction
+    return tx.transaction.delete({ where: { id } });
+  });
+};
 
 exports.updateReceipt = async (id, receiptUrl) => {
   return prisma.transaction.update({
