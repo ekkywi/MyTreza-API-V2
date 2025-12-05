@@ -16,6 +16,18 @@ exports.list = async (userId, { page = 1, limit = 20 } = {}) => {
 
 exports.detail = async (id) => walletRepo.findById(id);
 
-exports.update = async (id, payload) => walletRepo.update(id, payload);
+exports.update = async (id, payload, userId) => {
+  const wallet = await walletRepo.findById(id);
+  if (!wallet) throw Object.assign(new Error("Wallet not found"), { status: 404 });
+  if (wallet.userId !== userId) throw Object.assign(new Error("Forbidden access"), { status: 403 });
 
-exports.remove = async (id) => walletRepo.remove(id);
+  return walletRepo.update(id, payload);
+};
+
+exports.remove = async (id, userId) => {
+  const wallet = await walletRepo.findById(id);
+  if (!wallet) throw Object.assign(new Error("Wallet not found"), { status: 404 });
+  if (wallet.userId !== userId) throw Object.assign(new Error("Forbidden access"), { status: 403 });
+
+  return walletRepo.remove(id);
+};

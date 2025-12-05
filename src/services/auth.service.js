@@ -41,10 +41,8 @@ exports.login = async ({ email, password }) => {
 
 exports.refresh = async ({ refreshToken }) => {
   try {
-    const payload = jwt.verify(
-      refreshToken,
-      process.env.JWT_SECRET || "mytreza_secret_key"
-    );
+    const { verify } = require("../utils/jwt");
+    const payload = verify(refreshToken);
 
     // check saved token
     const saved = await refreshRepo.findByToken(refreshToken);

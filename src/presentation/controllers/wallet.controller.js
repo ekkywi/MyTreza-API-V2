@@ -34,7 +34,7 @@ exports.detail = async (req, res, next) => {
 
 exports.update = async (req, res, next) => {
   try {
-    const updated = await walletService.update(req.params.id, req.body);
+    const updated = await walletService.update(req.params.id, req.body, req.user.id);
     return success(res, "Wallet updated", updated);
   } catch (err) {
     next(err);
@@ -43,7 +43,7 @@ exports.update = async (req, res, next) => {
 
 exports.remove = async (req, res, next) => {
   try {
-    await walletService.remove(req.params.id);
+    await walletService.remove(req.params.id, req.user.id);
     return success(res, "Wallet deleted", null, 200);
   } catch (err) {
     next(err);

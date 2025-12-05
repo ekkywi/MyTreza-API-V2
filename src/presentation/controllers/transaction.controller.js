@@ -44,7 +44,7 @@ exports.detail = async (req, res, next) => {
 
 exports.update = async (req, res, next) => {
   try {
-    const updated = await transactionService.update(req.params.id, req.body);
+    const updated = await transactionService.update(req.params.id, req.body, req.user.id);
     return success(res, "Transaction updated", updated);
   } catch (err) {
     next(err);
@@ -53,7 +53,7 @@ exports.update = async (req, res, next) => {
 
 exports.remove = async (req, res, next) => {
   try {
-    await transactionService.remove(req.params.id);
+    await transactionService.remove(req.params.id, req.user.id);
     return success(res, "Transaction deleted", null, 200);
   } catch (err) {
     next(err);

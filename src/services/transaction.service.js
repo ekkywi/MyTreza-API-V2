@@ -47,7 +47,7 @@ exports.list = (opts) => trxRepo.list(opts);
 
 exports.detail = (id) => trxRepo.findById(id);
 
-exports.update = async (id, payload) => {
+exports.update = async (id, payload, userId) => {
   const prisma = require("../infrastructure/prismaClient");
 
   return prisma.$transaction(async (tx) => {
@@ -58,6 +58,11 @@ exports.update = async (id, payload) => {
     });
     if (!oldTrx)
       throw Object.assign(new Error("Transaction not found"), { status: 404 });
+
+    // Check ownership
+    if (oldTrx.userId !== userId) {
+      throw Object.assign(new Error("Forbidden access"), { status: 403 });
+    }
 
     // 2. Calculate revert amount (undo old transaction)
     let walletBalance = oldTrx.wallet.balance;
@@ -80,6 +85,9 @@ exports.update = async (id, payload) => {
     }
 
     // 4. Update wallet balance
+    if (walletBalance < 0) {
+      throw Object.assign(new Error("Insufficient wallet balance"), { status: 400 });
+    }
     await tx.wallet.update({
       where: { id: oldTrx.walletId },
       data: { balance: walletBalance },
@@ -93,7 +101,7 @@ exports.update = async (id, payload) => {
   });
 };
 
-exports.remove = async (id) => {
+exports.remove = async (id, userId) => {
   const prisma = require("../infrastructure/prismaClient");
 
   return prisma.$transaction(async (tx) => {
@@ -105,6 +113,11 @@ exports.remove = async (id) => {
     if (!trx)
       throw Object.assign(new Error("Transaction not found"), { status: 404 });
 
+    // Check ownership
+    if (trx.userId !== userId) {
+      throw Object.assign(new Error("Forbidden access"), { status: 403 });
+    }
+
     // 2. Revert wallet balance
     let newBalance = trx.wallet.balance;
     if (trx.type === "INCOME") {
@@ -114,6 +127,9 @@ exports.remove = async (id) => {
     }
 
     // 3. Update wallet
+    if (newBalance < 0) {
+      throw Object.assign(new Error("Insufficient wallet balance"), { status: 400 });
+    }
     await tx.wallet.update({
       where: { id: trx.walletId },
       data: { balance: newBalance },

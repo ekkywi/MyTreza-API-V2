@@ -1,116 +1,92 @@
 const prisma = require("../infrastructure/prismaClient");
 
-exports.getSummary = async (userId) => {
-  // === Date Range ===
-  const now = new Date();
-  const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+exports.getDashboardData = async (userId, month, year) => {
+  const startDate = new Date(year, month - 1, 1);
+  const endDate = new Date(year, month, 1);
 
-  const lastMonthFirst = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const lastMonthLast = new Date(now.getFullYear(), now.getMonth(), 0);
-
-  // === Total Net Worth ===
-  const wallets = await prisma.wallet.findMany({
-    where: { userId },
-    select: { balance: true },
-  });
-
-  const netWorth = wallets.reduce((sum, w) => sum + w.balance, 0);
-
-  // === Income & Expense This Month ===
-  const trxThisMonth = await prisma.transaction.groupBy({
-    by: ["type"],
+  // 1. Summary (Income, Expense, Balance)
+  const incomeAgg = await prisma.transaction.aggregate({
     _sum: { amount: true },
-    where: {
-      userId,
-      date: { gte: firstDay, lte: now },
-    },
+    where: { userId, type: "INCOME", date: { gte: startDate, lt: endDate } },
   });
-
-  const incomeThisMonth =
-    trxThisMonth.find((t) => t.type === "INCOME")?._sum.amount || 0;
-
-  const expenseThisMonth =
-    trxThisMonth.find((t) => t.type === "EXPENSE")?._sum.amount || 0;
-
-  // === Income & Expense Last Month ===
-  const trxLastMonth = await prisma.transaction.groupBy({
-    by: ["type"],
+  const expenseAgg = await prisma.transaction.aggregate({
     _sum: { amount: true },
-    where: {
-      userId,
-      date: { gte: lastMonthFirst, lte: lastMonthLast },
-    },
+    where: { userId, type: "EXPENSE", date: { gte: startDate, lt: endDate } },
   });
 
-  const lastIncome =
-    trxLastMonth.find((t) => t.type === "INCOME")?._sum.amount || 0;
+  const totalIncome = incomeAgg._sum.amount || 0;
+  const totalExpense = expenseAgg._sum.amount || 0;
+  const netBalance = totalIncome - totalExpense;
 
-  const lastExpense =
-    trxLastMonth.find((t) => t.type === "EXPENSE")?._sum.amount || 0;
+  // 2. Daily Trend (Line Chart)
+  // Group by day is tricky in Prisma without raw SQL for specific DBs.
+  // For simplicity/compatibility, we fetch all expenses and aggregate in JS.
+  const expenses = await prisma.transaction.findMany({
+    where: { userId, type: "EXPENSE", date: { gte: startDate, lt: endDate } },
+    select: { amount: true, date: true },
+  });
 
-  const diffLastMonth =
-    incomeThisMonth - expenseThisMonth - (lastIncome - lastExpense);
+  const dailyMap = {};
+  // Initialize all days in month
+  const daysInMonth = new Date(year, month, 0).getDate();
+  for (let i = 1; i <= daysInMonth; i++) {
+    dailyMap[i] = 0;
+  }
 
-  // === Biggest Spending Category ===
-  const biggest = await prisma.transaction.groupBy({
+  expenses.forEach((t) => {
+    const day = t.date.getDate();
+    dailyMap[day] += t.amount;
+  });
+
+  const trend = Object.keys(dailyMap).map((day) => ({
+    day: Number(day),
+    amount: dailyMap[day],
+  }));
+
+  // 3. Category Breakdown (Pie Chart)
+  const categoryAgg = await prisma.transaction.groupBy({
     by: ["categoryId"],
     _sum: { amount: true },
     where: {
       userId,
       type: "EXPENSE",
-      date: { gte: firstDay, lte: now },
+      date: { gte: startDate, lt: endDate },
+      // Include uncategorized items
     },
-    orderBy: { _sum: { amount: "desc" } },
-    take: 1,
   });
 
-  let biggestCategory = null;
-
-  if (biggest.length > 0) {
-    const cat = await prisma.category.findUnique({
-      where: { id: biggest[0].categoryId },
-    });
-
-    biggestCategory = {
-      name: cat?.name || "Lainnya",
-      amount: biggest[0]._sum.amount,
-    };
-  }
-
-  // === Lowest Wallet ===
-  const lowestWallet = await prisma.wallet.findFirst({
-    where: { userId },
-    orderBy: { balance: "asc" },
-  });
-
-  // === Weekly Trend (4 weeks) ===
-  const trend = [];
-  for (let i = 0; i < 4; i++) {
-    const start = new Date(now.getFullYear(), now.getMonth(), i * 7 + 1);
-    const end = new Date(now.getFullYear(), now.getMonth(), (i + 1) * 7);
-
-    const weekData = await prisma.transaction.groupBy({
-      by: ["type"],
-      _sum: { amount: true },
-      where: { userId, date: { gte: start, lte: end } },
-    });
-
-    trend.push({
-      week: i + 1,
-      income: weekData.find((t) => t.type === "INCOME")?._sum.amount || 0,
-      expense: weekData.find((t) => t.type === "EXPENSE")?._sum.amount || 0,
-    });
+  const breakdown = [];
+  for (const item of categoryAgg) {
+    if (item.categoryId) {
+      const category = await prisma.category.findUnique({
+        where: { id: item.categoryId },
+      });
+      if (category) {
+        breakdown.push({
+          categoryId: category.id,
+          label: category.name,
+          value: item._sum.amount || 0,
+          color: category.color || "#cccccc",
+        });
+      }
+    } else {
+      // Handle uncategorized as "Lainnya"
+      breakdown.push({
+        categoryId: "uncategorized",
+        label: "Lainnya",
+        value: item._sum.amount || 0,
+        color: "#9e9e9e", // Neutral Grey
+      });
+    }
   }
 
   return {
-    netWorth,
-    incomeThisMonth,
-    expenseThisMonth,
-    diffLastMonth,
-    biggestSpendingCategory: biggestCategory,
-    lowestWallet: lowestWallet
-      ? { name: lowestWallet.name, balance: lowestWallet.balance }
-      : null,
+    summary: {
+      totalIncome,
+      totalExpense,
+      netBalance,
+    },
     trend,
+    breakdown,
   };
 };

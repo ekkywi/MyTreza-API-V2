@@ -21,7 +21,7 @@ exports.list = async (req, res, next) => {
 
 exports.update = async (req, res, next) => {
   try {
-    const updated = await categoryService.update(req.params.id, req.body);
+    const updated = await categoryService.update(req.params.id, req.body, req.user.id);
     return success(res, 'Category updated', updated);
   } catch (err) {
     next(err);
@@ -30,7 +30,7 @@ exports.update = async (req, res, next) => {
 
 exports.remove = async (req, res, next) => {
   try {
-    await categoryService.remove(req.params.id);
+    await categoryService.remove(req.params.id, req.user.id);
     return success(res, 'Category deleted', null, 200);
   } catch (err) {
     next(err);

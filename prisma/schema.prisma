@@ -18,7 +18,7 @@ model BudgetMonthly {
 
   user User @relation(fields: [userId], references: [id])
 
-  @@unique([userId, month, year], name: "userId_month_year")
+  @@unique([userId, categoryId, month, year])
 }
 
 model BudgetCategory {
@@ -26,7 +26,7 @@ model BudgetCategory {
   userId     String
   categoryId String
   month      Int
-  year      Int
+  year       Int
   amount     Float
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
@@ -34,7 +34,7 @@ model BudgetCategory {
   user     User     @relation(fields: [userId], references: [id])
   category Category @relation(fields: [categoryId], references: [id])
 
-  @@unique([userId, categoryId, month, year], name: "userId_categoryId_month_year")
+  @@unique([userId, categoryId, month, year])
 }
 
 model User {

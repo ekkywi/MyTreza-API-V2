@@ -11,8 +11,17 @@ exports.create = async (
   return prisma.$transaction(async (tx) => {
     const from = await tx.wallet.findUnique({ where: { id: fromWalletId } });
     const to = await tx.wallet.findUnique({ where: { id: toWalletId } });
+
     if (!from || !to)
       throw Object.assign(new Error("Wallet not found"), { status: 404 });
+
+    // Enforce Internal Transfer Only
+    if (from.userId !== userId || to.userId !== userId) {
+      throw Object.assign(
+        new Error("Forbidden: You can only transfer between your own wallets"),
+        { status: 403 }
+      );
+    }
 
     const totalDeduction = amount + Number(adminFee);
 
@@ -48,11 +57,17 @@ exports.create = async (
     });
 
     // 3. create transactions for bookkeeping
+    // Find "Transfer" category
+    const transferCategory = await tx.category.findFirst({
+      where: { name: "Transfer", type: "EXPENSE" },
+    });
+
     // Expense for Sender: Amount + Fee
     await tx.transaction.create({
       data: {
         userId,
         walletId: fromWalletId,
+        categoryId: transferCategory ? transferCategory.id : null,
         type: "EXPENSE",
         amount: totalDeduction,
         description: `Transfer to ${to.name} (Fee: ${adminFee})`,
@@ -60,11 +75,17 @@ exports.create = async (
       },
     });
 
+    // Find "Transfer" (INCOME) category
+    const transferIncomeCategory = await tx.category.findFirst({
+      where: { name: "Transfer", type: "INCOME" },
+    });
+
     // Income for Receiver: Only Amount
     await tx.transaction.create({
       data: {
         userId,
         walletId: toWalletId,
+        categoryId: transferIncomeCategory ? transferIncomeCategory.id : null,
         type: "INCOME",
         amount,
         description: `Transfer from ${from.name}`,
