@@ -18,7 +18,7 @@ model BudgetMonthly {
 
   user User @relation(fields: [userId], references: [id])
 
-  @@unique([userId, categoryId, month, year])
+  @@unique([userId, month, year])
 }
 
 model BudgetCategory {
@@ -55,6 +55,10 @@ model User {
 
   BudgetMonthly  BudgetMonthly[]
   BudgetCategory BudgetCategory[]
+  Goal                 Goal[]
+  RecurringTransaction RecurringTransaction[]
+  Debt                 Debt[]
+  Notification         Notification[]
 }
 
 model Wallet {
@@ -71,8 +75,9 @@ model Wallet {
   user User @relation(fields: [userId], references: [id])
 
   Transaction  Transaction[]
-  TransferFrom Transfer[]    @relation("fromWallet")
-  TransferTo   Transfer[]    @relation("toWallet")
+  TransferFrom         Transfer[]             @relation("fromWallet")
+  TransferTo           Transfer[]             @relation("toWallet")
+  RecurringTransaction RecurringTransaction[]
 }
 
 model Category {
@@ -89,7 +94,8 @@ model Category {
   // RELATION BACK TO TRANSACTIONS
   Transaction Transaction[]
 
-  BudgetCategory BudgetCategory[]
+  BudgetCategory       BudgetCategory[]
+  RecurringTransaction RecurringTransaction[]
 }
 
 model Transaction {
@@ -134,6 +140,69 @@ model RefreshToken {
   userId    String   @unique
   token     String   @unique
   expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model Goal {
+  id            String    @id @default(uuid())
+  userId        String
+  name          String
+  targetAmount  Float
+  currentAmount Float     @default(0)
+  deadline      DateTime?
+  icon          String?   // e.g. "car", "home"
+  color         String?   // e.g. "#FF0000"
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model RecurringTransaction {
+  id            String   @id @default(uuid())
+  userId        String
+  walletId      String
+  categoryId    String?
+  type          String   // INCOME, EXPENSE
+  amount        Float
+  description   String?
+  frequency     String   // DAILY, WEEKLY, MONTHLY, YEARLY
+  startDate     DateTime
+  nextRun       DateTime // The next date this should run
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user     User     @relation(fields: [userId], references: [id])
+  wallet   Wallet   @relation(fields: [walletId], references: [id])
+  category Category? @relation(fields: [categoryId], references: [id])
+}
+
+model Debt {
+  id            String   @id @default(uuid())
+  userId        String
+  type          String   // "PAYABLE" (Hutang), "RECEIVABLE" (Piutang)
+  personName    String
+  amount        Float    // Total awal
+  remaining     Float    // Sisa yang belum lunas
+  dueDate       DateTime?
+  description   String?
+  isPaid        Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  title     String
+  message   String
+  type      String   // INFO, WARNING, DANGER, SUCCESS
+  isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id])

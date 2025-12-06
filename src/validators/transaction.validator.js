@@ -23,5 +23,11 @@ exports.searchTransactionSchema = Joi.object({
   walletId: Joi.string().uuid().optional(),
   categoryId: Joi.string().uuid().optional(),
   q: Joi.string().allow("").optional(),
-  sort: Joi.string().valid("newest", "olders").optional(),
+  sort: Joi.string()
+    .valid("newest", "oldest", "amount-high", "amount-low")
+    .optional(),
+  minAmount: Joi.number().optional(),
+  maxAmount: Joi.number().optional(),
+  page: Joi.number().integer().min(1).optional(),
+  limit: Joi.number().integer().min(1).max(100).optional(),
 });

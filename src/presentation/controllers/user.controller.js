@@ -29,6 +29,11 @@ exports.changePassword = async (req, res, next) => {
   }
 };
 
+exports.deleteAccount = async (req, res) => {
+  await userService.deleteAccount(req.user.id);
+  res.json({ message: "Account deleted successfully" });
+};
+
 exports.uploadAvatar = async (req, res, next) => {
   try {
     if (!req.uploadedFileUrl) {

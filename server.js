@@ -42,11 +42,16 @@ app.use(errorHandler);
 
 // -----------------------------------------------------------
 // ⬇️ AUTO SEED CATEGORIES BEFORE SERVER START
+const initCron = require("./src/infrastructure/scheduler/cron");
+
 async function initApp() {
   try {
     console.log("⏳ Initializing MyTreza API...");
     await seedCategories();
     console.log("✔ Default categories ready.");
+
+    // Start Cron
+    initCron();
   } catch (err) {
     console.error("❌ Failed seeding categories:", err);
   }

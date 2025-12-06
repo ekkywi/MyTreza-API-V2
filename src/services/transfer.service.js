@@ -57,9 +57,9 @@ exports.create = async (
     });
 
     // 3. create transactions for bookkeeping
-    // Find "Transfer" category
+    // Find "Transfer Antar Wallet" category
     const transferCategory = await tx.category.findFirst({
-      where: { name: "Transfer", type: "EXPENSE" },
+      where: { name: "Transfer Antar Wallet", type: "EXPENSE" },
     });
 
     // Expense for Sender: Amount + Fee
@@ -75,9 +75,9 @@ exports.create = async (
       },
     });
 
-    // Find "Transfer" (INCOME) category
+    // Find "Transfer Antar Wallet" (INCOME) category
     const transferIncomeCategory = await tx.category.findFirst({
-      where: { name: "Transfer", type: "INCOME" },
+      where: { name: "Transfer Antar Wallet", type: "INCOME" },
     });
 
     // Income for Receiver: Only Amount

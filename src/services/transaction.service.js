@@ -2,6 +2,55 @@ const trxRepo = require("../repositories/transaction.repository");
 const walletRepo = require("../repositories/wallet.repository");
 const prisma = require("../infrastructure/prismaClient");
 
+const notificationService = require("./notification.service");
+
+async function checkBudget(userId, date) {
+  try {
+    const month = date.getMonth() + 1;
+    const year = date.getFullYear();
+
+    // 1. Get Global Budget
+    const budget = await prisma.budgetMonthly.findFirst({
+      where: { userId, month, year },
+    });
+
+    if (!budget) return;
+
+    // 2. Calculate Total Expense
+    const aggregations = await prisma.transaction.aggregate({
+      _sum: { amount: true },
+      where: {
+        userId,
+        type: "EXPENSE",
+        date: {
+          gte: new Date(year, month - 1, 1),
+          lt: new Date(year, month, 1),
+        },
+      },
+    });
+
+    const totalExpense = aggregations._sum.amount || 0;
+
+    // 3. Check Threshold
+    if (totalExpense > budget.amount) {
+      await notificationService.create(userId, {
+        title: "Budget Exceeded! 🚨",
+        message: `You have exceeded your monthly budget of ${budget.amount}. Current total: ${totalExpense}`,
+        type: "DANGER",
+      });
+    } else if (totalExpense > budget.amount * 0.8) {
+      // Check if we already sent a warning? (Optimization for later)
+      await notificationService.create(userId, {
+        title: "Budget Warning ⚠️",
+        message: `You have reached 80% of your monthly budget.`,
+        type: "WARNING",
+      });
+    }
+  } catch (err) {
+    console.error("Failed to check budget:", err);
+  }
+}
+
 exports.create = async (
   userId,
   { walletId, categoryId, type, amount, description, date }
@@ -11,15 +60,13 @@ exports.create = async (
   if (!wallet)
     throw Object.assign(new Error("Wallet not found"), { status: 404 });
   if (type === "EXPENSE" && wallet.balance < amount) {
-    // still allow negative? we will allow but warn. For now, let's block.
     throw Object.assign(new Error("Insufficient wallet balance"), {
       status: 400,
     });
   }
 
   // update wallet balance atomically inside transaction
-  const prisma = require("../infrastructure/prismaClient");
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     // 1. create transaction
     const created = await tx.transaction.create({
       data: {
@@ -41,16 +88,100 @@ exports.create = async (
     });
     return created;
   });
+
+  // Check Budget (Fire and forget or await)
+  if (type === "EXPENSE") {
+    await checkBudget(userId, date ? new Date(date) : new Date());
+  }
+
+  return result;
 };
 
-exports.list = (opts) => trxRepo.list(opts);
+exports.findAll = async (userId, query) => {
+  const {
+    walletId,
+    categoryId,
+    type,
+    q,
+    startDate,
+    endDate,
+    minAmount,
+    maxAmount,
+    sort,
+    page = 1,
+    limit = 20,
+  } = query;
 
-exports.detail = (id) => trxRepo.findById(id);
+  const where = { userId };
 
+  // Date Range
+  if (startDate || endDate) {
+    where.date = {};
+    if (startDate) where.date.gte = new Date(startDate);
+    if (endDate) {
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      where.date.lte = end;
+    }
+  }
+
+  // Wallet Filter
+  if (walletId) where.walletId = walletId;
+
+  // Category Filter
+  if (categoryId) where.categoryId = categoryId;
+
+  // Type Filter
+  if (type) where.type = type;
+
+  // Amount Range
+  if (minAmount || maxAmount) {
+    where.amount = {};
+    if (minAmount) where.amount.gte = Number(minAmount);
+    if (maxAmount) where.amount.lte = Number(maxAmount);
+  }
+
+  // Search Text
+  if (q) {
+    where.OR = [
+      { description: { contains: q, mode: "insensitive" } },
+      { category: { name: { contains: q, mode: "insensitive" } } },
+    ];
+  }
+
+  // Sorting
+  let orderBy = { date: "desc" };
+  if (sort === "oldest") orderBy = { date: "asc" };
+  if (sort === "amount-high") orderBy = { amount: "desc" };
+  if (sort === "amount-low") orderBy = { amount: "asc" };
+
+  // Pagination
+  const skip = (Number(page) - 1) * Number(limit);
+  const take = Number(limit);
+
+  const [items, total] = await Promise.all([
+    prisma.transaction.findMany({
+      where,
+      include: { wallet: true, category: true },
+      orderBy,
+      skip,
+      take,
+    }),
+    prisma.transaction.count({ where }),
+  ]);
+
+  return {
+    items,
+    meta: {
+      page: Number(page),
+      limit: Number(limit),
+      total,
+      totalPages: Math.ceil(total / limit),
+    },
+  };
+};
 exports.update = async (id, payload, userId) => {
-  const prisma = require("../infrastructure/prismaClient");
-
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     // 1. Get old transaction
     const oldTrx = await tx.transaction.findUnique({
       where: { id },
@@ -99,11 +230,16 @@ exports.update = async (id, payload, userId) => {
       data: payload,
     });
   });
+
+  // Check Budget
+  if (payload.type === "EXPENSE" || (!payload.type && result.type === "EXPENSE")) {
+    await checkBudget(userId, result.date);
+  }
+
+  return result;
 };
 
 exports.remove = async (id, userId) => {
-  const prisma = require("../infrastructure/prismaClient");
-
   return prisma.$transaction(async (tx) => {
     // 1. Get transaction to delete
     const trx = await tx.transaction.findUnique({
@@ -147,82 +283,4 @@ exports.updateReceipt = async (id, receiptUrl) => {
   });
 };
 
-exports.search = async (userId, query) => {
-  const {
-    walletId,
-    categoryId,
-    type,
-    q,
-    startDate,
-    endDate,
-    minAmount,
-    maxAmount,
-    sort,
-    page,
-    limit,
-  } = query;
 
-  const where = { userId };
-
-  // Date Range
-  if (startDate || endDate) {
-    where.date = {};
-    if (startDate) where.date.gte = new Date(startDate);
-    if (endDate) where.date.lte = new Date(endDate);
-  }
-
-  // Wallet Filter
-  if (walletId) where.walletId = walletId;
-
-  // Category Filter
-  if (categoryId) where.categoryId = categoryId;
-
-  // Type Filter
-  if (type) where.type = type;
-
-  // Amount Range
-  if (minAmount || maxAmount) {
-    where.amount = {};
-    if (minAmount) where.amount.gte = Number(minAmount);
-    if (maxAmount) where.amount.lte = Number(maxAmount);
-  }
-
-  // Search Text
-  if (q) {
-    where.OR = [
-      { description: { contains: q, mode: "insensitive" } },
-      { note: { contains: q, mode: "insensitive" } },
-    ];
-  }
-
-  // Sorting
-  let orderBy = { date: "desc" };
-  if (sort === "oldest") orderBy = { date: "asc" };
-  if (sort === "amount-high") orderBy = { amount: "desc" };
-  if (sort === "amount-low") orderBy = { amount: "asc" };
-
-  // Pagination
-  const skip = (page - 1) * limit;
-  const take = limit;
-
-  const [items, total] = await Promise.all([
-    prisma.transaction.findMany({
-      where,
-      include: { wallet: true, category: true },
-      orderBy,
-      skip,
-      take,
-    }),
-    prisma.transaction.count({ where }),
-  ]);
-
-  return {
-    items,
-    meta: {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    },
-  };
-};

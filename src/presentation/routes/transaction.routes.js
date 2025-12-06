@@ -6,21 +6,12 @@ const validate = require("../middleware/validate.middleware");
 const {
   createTransactionSchema,
   updateTransactionSchema,
+  searchTransactionSchema,
 } = require("../../validators/transaction.validator");
 const multerLocal = require("../../infrastructure/upload/multerLocal");
 const {
   handleImageUpload,
 } = require("../../infrastructure/upload/localUploader");
-const {
-  searchTransactionSchema,
-} = require("../../validators/transaction.validator");
-
-router.get(
-  "/search",
-  auth,
-  validate(searchTransactionSchema),
-  transactionController.search
-);
 
 router.post(
   "/",
@@ -29,7 +20,12 @@ router.post(
   transactionController.create
 );
 
-router.get("/", auth, transactionController.list);
+router.get(
+  "/",
+  auth,
+  validate(searchTransactionSchema),
+  transactionController.list
+);
 
 router.get("/:id", auth, transactionController.detail);
 

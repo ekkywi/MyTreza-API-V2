@@ -25,8 +25,11 @@ router.put(
   "/change-password",
   auth,
   validate(changePasswordSchema),
+  validate(changePasswordSchema),
   userController.changePassword
 );
+
+router.delete("/me", auth, userController.deleteAccount);
 
 router.post(
   "/avatar",
