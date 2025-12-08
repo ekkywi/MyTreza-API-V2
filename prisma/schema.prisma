@@ -115,6 +115,10 @@ model Transaction {
 
   // RELATION FIXED: add name "TransactionCategory"
   category Category? @relation(fields: [categoryId], references: [id])
+
+  @@index([userId, date])
+  @@index([userId, type])
+  @@index([userId, walletId])
 }
 
 model Transfer {
@@ -178,6 +182,8 @@ model RecurringTransaction {
   user     User     @relation(fields: [userId], references: [id])
   wallet   Wallet   @relation(fields: [walletId], references: [id])
   category Category? @relation(fields: [categoryId], references: [id])
+
+  @@index([isActive, nextRun])
 }
 
 model Debt {
@@ -194,6 +200,8 @@ model Debt {
   updatedAt     DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, isPaid, type])
 }
 
 model Notification {
@@ -206,4 +214,7 @@ model Notification {
   createdAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, isRead])
+  @@index([userId, createdAt])
 }

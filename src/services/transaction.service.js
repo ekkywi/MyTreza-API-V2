@@ -156,8 +156,10 @@ exports.findAll = async (userId, query) => {
   if (sort === "amount-low") orderBy = { amount: "asc" };
 
   // Pagination
-  const skip = (Number(page) - 1) * Number(limit);
-  const take = Number(limit);
+  const pageNum = Number(page) || 1;
+  const limitNum = Math.min(Number(limit) || 20, 100); // Cap limit at 100
+  const skip = (pageNum - 1) * limitNum;
+  const take = limitNum;
 
   const [items, total] = await Promise.all([
     prisma.transaction.findMany({
@@ -173,10 +175,10 @@ exports.findAll = async (userId, query) => {
   return {
     items,
     meta: {
-      page: Number(page),
-      limit: Number(limit),
+      page: pageNum,
+      limit: limitNum,
       total,
-      totalPages: Math.ceil(total / limit),
+      totalPages: Math.ceil(total / limitNum),
     },
   };
 };
