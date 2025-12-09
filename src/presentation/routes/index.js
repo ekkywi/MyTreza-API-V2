@@ -16,17 +16,18 @@ const debtRoutes = require("./debt.routes");
 const notificationRoutes = require("./notification.routes");
 
 router.use("/auth", authRoutes);
-router.use("/user", userRoutes);
+router.use("/users", userRoutes);
 router.use("/wallets", walletRoutes);
 router.use("/categories", categoryRoutes);
 router.use("/transactions", transactionRoutes);
-router.use("/transfer", transferRoutes);
-router.use("/dashboard", dashboardRoutes);
-router.use("/budget", budgetRoutes);
-router.use("/reports", reportRoutes);
+router.use("/transfers", transferRoutes);
+router.use("/budgets", budgetRoutes);
 router.use("/goals", goalRoutes);
-router.use("/recurring", recurringRoutes);
 router.use("/debts", debtRoutes);
+router.use("/recurring-transactions", recurringRoutes);
+
+router.use("/dashboard", dashboardRoutes);
+router.use("/reports", reportRoutes);
 router.use("/notifications", notificationRoutes);
 
 module.exports = router;
