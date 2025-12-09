@@ -44,6 +44,7 @@ model User {
   password  String
   avatarUrl String?
   currency  String   @default("IDR")
+  isEarlyAdopter Boolean @default(true) // Early adopter privilege flag
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
