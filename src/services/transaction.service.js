@@ -108,14 +108,25 @@ exports.findAll = async (userId, query) => {
     minAmount,
     maxAmount,
     sort,
-    page = 1,
-    limit = 20,
+    month,
+    year,
   } = query;
 
   const where = { userId };
 
-  // Date Range
-  if (startDate || endDate) {
+  // Month/Year Filter (Priority over startDate/endDate)
+  if (month || year) {
+    const now = new Date();
+    const targetYear = year ? Number(year) : now.getFullYear();
+    const targetMonth = month ? Number(month) : now.getMonth() + 1;
+
+    const start = new Date(targetYear, targetMonth - 1, 1);
+    const end = new Date(targetYear, targetMonth, 0, 23, 59, 59, 999);
+
+    where.date = { gte: start, lte: end };
+  }
+  // Custom Date Range
+  else if (startDate || endDate) {
     where.date = {};
     if (startDate) where.date.gte = new Date(startDate);
     if (endDate) {

@@ -23,6 +23,33 @@ exports.list = async (req, res, next) => {
   }
 };
 
+
+exports.stats = async (req, res, next) => {
+  try {
+    const { month, year } = req.query;
+    const stats = await walletService.getStats(req.params.id, req.user.id, {
+      month,
+      year,
+    });
+    return success(res, "Wallet stats retrieved", stats);
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.dailyStats = async (req, res, next) => {
+  try {
+    const { month, year } = req.query;
+    const data = await walletService.getDailyStats(req.params.id, req.user.id, {
+      month,
+      year,
+    });
+    return success(res, "Daily stats retrieved", data);
+  } catch (err) {
+    next(err);
+  }
+};
+
 exports.detail = async (req, res, next) => {
   try {
     const wallet = await walletService.detail(req.params.id);
