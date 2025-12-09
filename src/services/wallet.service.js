@@ -1,11 +1,26 @@
 const walletRepo = require("../repositories/wallet.repository");
 const prisma = require("../infrastructure/prismaClient");
 
-exports.create = async (
-  userId,
-  { name, type, initialBalance = 0, color, icon }
-) => {
-  const data = { userId, name, type, balance: initialBalance, color, icon };
+exports.create = async (userId, payload) => {
+  const { name, type, balance, initialBalance, color, icon } = payload;
+
+  let finalBalance = 0;
+  if (balance !== undefined && balance !== null) {
+    finalBalance = parseFloat(balance);
+  } else if (initialBalance !== undefined && initialBalance !== null) {
+    finalBalance = parseFloat(initialBalance);
+  }
+
+  if (isNaN(finalBalance)) finalBalance = 0;
+  const data = {
+    userId,
+    name,
+    type,
+    balance: finalBalance,
+    color,
+    icon,
+  };
+
   return walletRepo.create(data);
 };
 
@@ -19,16 +34,20 @@ exports.detail = async (id) => walletRepo.findById(id);
 
 exports.update = async (id, payload, userId) => {
   const wallet = await walletRepo.findById(id);
-  if (!wallet) throw Object.assign(new Error("Wallet not found"), { status: 404 });
-  if (wallet.userId !== userId) throw Object.assign(new Error("Forbidden access"), { status: 403 });
+  if (!wallet)
+    throw Object.assign(new Error("Wallet not found"), { status: 404 });
+  if (wallet.userId !== userId)
+    throw Object.assign(new Error("Forbidden access"), { status: 403 });
 
   return walletRepo.update(id, payload);
 };
 
 exports.remove = async (id, userId) => {
   const wallet = await walletRepo.findById(id);
-  if (!wallet) throw Object.assign(new Error("Wallet not found"), { status: 404 });
-  if (wallet.userId !== userId) throw Object.assign(new Error("Forbidden access"), { status: 403 });
+  if (!wallet)
+    throw Object.assign(new Error("Wallet not found"), { status: 404 });
+  if (wallet.userId !== userId)
+    throw Object.assign(new Error("Forbidden access"), { status: 403 });
 
   return walletRepo.remove(id);
 };
@@ -124,7 +143,10 @@ exports.getDailyStats = async (walletId, userId, { month, year } = {}) => {
   // Ideally all days for chart continuity.
   const daysInMonth = new Date(targetYear, targetMonth, 0).getDate();
   for (let d = 1; d <= daysInMonth; d++) {
-    const dateStr = `${targetYear}-${String(targetMonth).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    const dateStr = `${targetYear}-${String(targetMonth).padStart(
+      2,
+      "0"
+    )}-${String(d).padStart(2, "0")}`;
     dailyMap[dateStr] = { date: dateStr, income: 0, expense: 0 };
   }
 
