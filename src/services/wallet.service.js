@@ -5,6 +5,7 @@ exports.create = async (userId, payload) => {
   const { name, type, balance, initialBalance, color, icon } = payload;
 
   let finalBalance = 0;
+  // Logic parsing saldo
   if (balance !== undefined && balance !== null) {
     finalBalance = parseFloat(balance);
   } else if (initialBalance !== undefined && initialBalance !== null) {
@@ -12,6 +13,7 @@ exports.create = async (userId, payload) => {
   }
 
   if (isNaN(finalBalance)) finalBalance = 0;
+
   const data = {
     userId,
     name,
@@ -25,29 +27,64 @@ exports.create = async (userId, payload) => {
 };
 
 exports.list = async (userId, { page = 1, limit = 20 } = {}) => {
-  const skip = (page - 1) * limit;
+  const pageNum = Number(page) || 1;
+  const limitNum = Number(limit) || 20;
+  const skip = (pageNum - 1) * limitNum;
 
+  // 1. Ambil Data
   const items = await prisma.wallet.findMany({
     where: {
       userId: userId,
-      isArchived: false,
+      isArchived: false, // Filter Arsip
     },
     skip: skip,
-    take: limit,
+    take: limitNum,
     orderBy: {
       createdAt: "desc",
     },
   });
 
-  return { items };
+  // 2. Hitung Total (Untuk Pagination Frontend)
+  const total = await prisma.wallet.count({
+    where: {
+      userId: userId,
+      isArchived: false,
+    },
+  });
+
+  return {
+    items,
+    meta: {
+      page: pageNum,
+      limit: limitNum,
+      total,
+      totalPages: Math.ceil(total / limitNum),
+    },
+  };
 };
 
-exports.detail = async (id) => walletRepo.findById(id);
+// [FIX SECURITY] Tambahkan parameter userId untuk pengecekan kepemilikan
+exports.detail = async (id, userId) => {
+  const wallet = await walletRepo.findById(id);
+
+  if (!wallet) {
+    throw Object.assign(new Error("Wallet not found"), { status: 404 });
+  }
+
+  // CEK KEPEMILIKAN (Wajib!)
+  if (wallet.userId !== userId) {
+    throw Object.assign(new Error("Forbidden access"), { status: 403 });
+  }
+
+  return wallet;
+};
 
 exports.update = async (id, payload, userId) => {
   const wallet = await walletRepo.findById(id);
   if (!wallet)
     throw Object.assign(new Error("Wallet not found"), { status: 404 });
+
+  // Cek Kepemilikan
   if (wallet.userId !== userId)
     throw Object.assign(new Error("Forbidden access"), { status: 403 });
 
@@ -58,6 +95,8 @@ exports.remove = async (id, userId) => {
   const wallet = await walletRepo.findById(id);
   if (!wallet)
     throw Object.assign(new Error("Wallet not found"), { status: 404 });
+
+  // Cek Kepemilikan
   if (wallet.userId !== userId)
     throw Object.assign(new Error("Forbidden access"), { status: 403 });
 
@@ -75,7 +114,7 @@ exports.getStats = async (walletId, userId, { month, year } = {}) => {
   // 2. Build Date Filter
   const now = new Date();
   const targetYear = year ? Number(year) : now.getFullYear();
-  const targetMonth = month ? Number(month) : now.getMonth() + 1; // 1-12
+  const targetMonth = month ? Number(month) : now.getMonth() + 1;
 
   const startDate = new Date(targetYear, targetMonth - 1, 1);
   const endDate = new Date(targetYear, targetMonth, 0, 23, 59, 59, 999);
@@ -132,9 +171,7 @@ exports.getDailyStats = async (walletId, userId, { month, year } = {}) => {
   const startDate = new Date(targetYear, targetMonth - 1, 1);
   const endDate = new Date(targetYear, targetMonth, 0, 23, 59, 59, 999);
 
-  // 3. get all transactions for this month (id, type, amount, dateOnly)
-  // Note: Prisma groupBy doesn't support "day of date" easily in all DBs without raw query.
-  // For portability and simplicity (since n < 1000/month usually), we fetch and map in JS.
+  // 3. Get Transactions
   const transactions = await prisma.transaction.findMany({
     where: {
       walletId,
@@ -150,9 +187,6 @@ exports.getDailyStats = async (walletId, userId, { month, year } = {}) => {
 
   // 4. Group by Date
   const dailyMap = {};
-
-  // Initialize all days of month? Or just days with transaction?
-  // Ideally all days for chart continuity.
   const daysInMonth = new Date(targetYear, targetMonth, 0).getDate();
   for (let d = 1; d <= daysInMonth; d++) {
     const dateStr = `${targetYear}-${String(targetMonth).padStart(
@@ -163,8 +197,7 @@ exports.getDailyStats = async (walletId, userId, { month, year } = {}) => {
   }
 
   transactions.forEach((tx) => {
-    // tx.date is Date object
-    const dateStr = tx.date.toISOString().split("T")[0]; // YYYY-MM-DD
+    const dateStr = tx.date.toISOString().split("T")[0];
     if (dailyMap[dateStr]) {
       if (tx.type === "INCOME") dailyMap[dateStr].income += tx.amount;
       if (tx.type === "EXPENSE") dailyMap[dateStr].expense += tx.amount;
@@ -175,6 +208,7 @@ exports.getDailyStats = async (walletId, userId, { month, year } = {}) => {
 };
 
 exports.archiveWallet = async (walletId, userId) => {
+  // Menggunakan findFirst dengan userId memastikan keamanan (User hanya bisa akses miliknya)
   const wallet = await prisma.wallet.findFirst({
     where: {
       id: walletId,
@@ -186,6 +220,7 @@ exports.archiveWallet = async (walletId, userId) => {
     throw new Error("Dompet tidak ditemukan atau bukan milik Anda.");
   }
 
+  // Safety Check Saldo
   if (wallet.balance > 1) {
     throw new Error(
       "Gagal Arsip: Saldo dompet harus Rp 0. Silakan transfer sisa saldo ke dompet lain terlebih dahulu."

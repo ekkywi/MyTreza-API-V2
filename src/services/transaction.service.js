@@ -1,9 +1,9 @@
 const trxRepo = require("../repositories/transaction.repository");
 const walletRepo = require("../repositories/wallet.repository");
 const prisma = require("../infrastructure/prismaClient");
-
 const notificationService = require("./notification.service");
 
+// --- Helper: Check Budget ---
 async function checkBudget(userId, date) {
   try {
     const month = date.getMonth() + 1;
@@ -31,7 +31,7 @@ async function checkBudget(userId, date) {
 
     const totalExpense = aggregations._sum.amount || 0;
 
-    // 3. Check Threshold
+    // 3. Check Threshold & Notify
     if (totalExpense > budget.amount) {
       await notificationService.create(userId, {
         title: "Budget Exceeded! 🚨",
@@ -39,7 +39,6 @@ async function checkBudget(userId, date) {
         type: "DANGER",
       });
     } else if (totalExpense > budget.amount * 0.8) {
-      // Check if we already sent a warning? (Optimization for later)
       await notificationService.create(userId, {
         title: "Budget Warning ⚠️",
         message: `You have reached 80% of your monthly budget.`,
@@ -51,11 +50,11 @@ async function checkBudget(userId, date) {
   }
 }
 
+// --- CREATE TRANSACTION ---
 exports.create = async (
   userId,
-  { walletId, categoryId, type, amount, description, date }
+  { walletId, categoryId, type, amount, description, date, transferId } // Added transferId support
 ) => {
-  // basic validation
   const wallet = await walletRepo.findById(walletId);
   if (!wallet)
     throw Object.assign(new Error("Wallet not found"), { status: 404 });
@@ -65,9 +64,9 @@ exports.create = async (
     });
   }
 
-  // update wallet balance atomically inside transaction
+  // Atomic Transaction
   const result = await prisma.$transaction(async (tx) => {
-    // 1. create transaction
+    // 1. Create Record
     const created = await tx.transaction.create({
       data: {
         userId,
@@ -77,27 +76,33 @@ exports.create = async (
         amount,
         description,
         date: date ? new Date(date) : new Date(),
+        transferId: transferId || null, // Link to Transfer if exists
       },
     });
-    // 2. update wallet
+
+    // 2. Update Wallet Balance
     const newBalance =
       type === "INCOME" ? wallet.balance + amount : wallet.balance - amount;
+
     await tx.wallet.update({
       where: { id: walletId },
       data: { balance: newBalance },
     });
+
     return created;
   });
 
-  // Check Budget (Fire and forget or await)
+  // Check Budget (Async)
   if (type === "EXPENSE") {
-    await checkBudget(userId, date ? new Date(date) : new Date());
+    checkBudget(userId, date ? new Date(date) : new Date());
   }
 
   return result;
 };
 
+// --- FIND ALL (FIXED DESTRUCTURING) ---
 exports.findAll = async (userId, query) => {
+  // [FIX] Destructure page & limit here to avoid ReferenceError
   const {
     walletId,
     categoryId,
@@ -110,23 +115,21 @@ exports.findAll = async (userId, query) => {
     sort,
     month,
     year,
+    page = 1, // Default 1
+    limit = 20, // Default 20
   } = query;
 
   const where = { userId };
 
-  // Month/Year Filter (Priority over startDate/endDate)
+  // --- FILTERS ---
   if (month || year) {
     const now = new Date();
     const targetYear = year ? Number(year) : now.getFullYear();
     const targetMonth = month ? Number(month) : now.getMonth() + 1;
-
     const start = new Date(targetYear, targetMonth - 1, 1);
     const end = new Date(targetYear, targetMonth, 0, 23, 59, 59, 999);
-
     where.date = { gte: start, lte: end };
-  }
-  // Custom Date Range
-  else if (startDate || endDate) {
+  } else if (startDate || endDate) {
     where.date = {};
     if (startDate) where.date.gte = new Date(startDate);
     if (endDate) {
@@ -136,23 +139,16 @@ exports.findAll = async (userId, query) => {
     }
   }
 
-  // Wallet Filter
   if (walletId) where.walletId = walletId;
-
-  // Category Filter
   if (categoryId) where.categoryId = categoryId;
-
-  // Type Filter
   if (type) where.type = type;
 
-  // Amount Range
   if (minAmount || maxAmount) {
     where.amount = {};
     if (minAmount) where.amount.gte = Number(minAmount);
     if (maxAmount) where.amount.lte = Number(maxAmount);
   }
 
-  // Search Text
   if (q) {
     where.OR = [
       { description: { contains: q, mode: "insensitive" } },
@@ -160,25 +156,25 @@ exports.findAll = async (userId, query) => {
     ];
   }
 
-  // Sorting
+  // --- SORTING ---
   let orderBy = { date: "desc" };
   if (sort === "oldest") orderBy = { date: "asc" };
   if (sort === "amount-high") orderBy = { amount: "desc" };
   if (sort === "amount-low") orderBy = { amount: "asc" };
 
-  // Pagination
-  const pageNum = Number(page) || 1;
-  const limitNum = Math.min(Number(limit) || 20, 100); // Cap limit at 100
+  // --- PAGINATION ---
+  const pageNum = Number(page);
+  const limitNum = Math.min(Number(limit), 100);
   const skip = (pageNum - 1) * limitNum;
-  const take = limitNum;
 
+  // --- EXECUTE QUERY ---
   const [items, total] = await Promise.all([
     prisma.transaction.findMany({
       where,
-      include: { wallet: true, category: true },
+      include: { wallet: true, category: true }, // Join tables
       orderBy,
       skip,
-      take,
+      take: limitNum,
     }),
     prisma.transaction.count({ where }),
   ]);
@@ -193,60 +189,59 @@ exports.findAll = async (userId, query) => {
     },
   };
 };
+
+// --- UPDATE TRANSACTION ---
 exports.update = async (id, payload, userId) => {
   const result = await prisma.$transaction(async (tx) => {
-    // 1. Get old transaction
+    // 1. Get Old Data
     const oldTrx = await tx.transaction.findUnique({
       where: { id },
       include: { wallet: true },
     });
     if (!oldTrx)
       throw Object.assign(new Error("Transaction not found"), { status: 404 });
-
-    // Check ownership
-    if (oldTrx.userId !== userId) {
+    if (oldTrx.userId !== userId)
       throw Object.assign(new Error("Forbidden access"), { status: 403 });
-    }
 
-    // 2. Calculate revert amount (undo old transaction)
+    // 2. Revert Old Balance
     let walletBalance = oldTrx.wallet.balance;
-    if (oldTrx.type === "INCOME") {
-      walletBalance -= oldTrx.amount;
-    } else {
-      walletBalance += oldTrx.amount;
-    }
+    walletBalance =
+      oldTrx.type === "INCOME"
+        ? walletBalance - oldTrx.amount
+        : walletBalance + oldTrx.amount;
 
-    // 3. Apply new transaction effect
-    // Use new values if provided, otherwise use old values
+    // 3. Apply New Balance
     const newAmount =
       payload.amount !== undefined ? payload.amount : oldTrx.amount;
     const newType = payload.type || oldTrx.type;
 
-    if (newType === "INCOME") {
-      walletBalance += newAmount;
-    } else {
-      walletBalance -= newAmount;
-    }
+    walletBalance =
+      newType === "INCOME"
+        ? walletBalance + newAmount
+        : walletBalance - newAmount;
 
-    // 4. Update wallet balance
-    if (walletBalance < 0) {
-      throw Object.assign(new Error("Insufficient wallet balance"), { status: 400 });
-    }
+    // 4. Check & Update Wallet
+    // (Optional: Allow negative balance? If not, uncomment check)
+    // if (walletBalance < 0) throw Object.assign(new Error("Insufficient wallet balance"), { status: 400 });
+
     await tx.wallet.update({
       where: { id: oldTrx.walletId },
       data: { balance: walletBalance },
     });
 
-    // 5. Update transaction record
+    // 5. Update Transaction
     return tx.transaction.update({
       where: { id },
       data: payload,
     });
   });
 
-  // Check Budget
-  if (payload.type === "EXPENSE" || (!payload.type && result.type === "EXPENSE")) {
-    await checkBudget(userId, result.date);
+  // Check Budget Trigger
+  if (
+    payload.type === "EXPENSE" ||
+    (!payload.type && result.type === "EXPENSE")
+  ) {
+    checkBudget(userId, result.date);
   }
 
   return result;
@@ -254,38 +249,79 @@ exports.update = async (id, payload, userId) => {
 
 exports.remove = async (id, userId) => {
   return prisma.$transaction(async (tx) => {
-    // 1. Get transaction to delete
-    const trx = await tx.transaction.findUnique({
+    // 1. Cek Transaksi yang mau dihapus
+    const targetTrx = await tx.transaction.findUnique({
       where: { id },
-      include: { wallet: true },
+      select: { id: true, userId: true, transferId: true },
     });
-    if (!trx)
+
+    if (!targetTrx)
       throw Object.assign(new Error("Transaction not found"), { status: 404 });
-
-    // Check ownership
-    if (trx.userId !== userId) {
+    if (targetTrx.userId !== userId)
       throw Object.assign(new Error("Forbidden access"), { status: 403 });
+
+    // =================================================
+    // SKENARIO 1: INI BAGIAN DARI TRANSFER (BERPASANGAN)
+    // =================================================
+    if (targetTrx.transferId) {
+      // Ambil SEMUA transaksi yang terkait dengan Transfer ID ini
+      const relatedTransactions = await tx.transaction.findMany({
+        where: { transferId: targetTrx.transferId },
+        include: { wallet: true },
+      });
+
+      // A. Loop untuk mengembalikan saldo (REVERT BALANCE)
+      for (const t of relatedTransactions) {
+        let revertBalance = t.wallet.balance;
+
+        if (t.type === "INCOME") {
+          revertBalance -= t.amount; // Tarik kembali uang masuk
+        } else {
+          revertBalance += t.amount; // Kembalikan uang keluar
+        }
+
+        // Update Saldo Dompet
+        await tx.wallet.update({
+          where: { id: t.walletId },
+          data: { balance: revertBalance },
+        });
+      }
+
+      // B. HAPUS MANUAL KEDUA TRANSAKSI (Fix Masalah Anda)
+      // Kita hapus anak-anaknya dulu biar yakin 100% hilang
+      await tx.transaction.deleteMany({
+        where: { transferId: targetTrx.transferId },
+      });
+
+      // C. Hapus Induk Transfer
+      return tx.transfer.delete({
+        where: { id: targetTrx.transferId },
+      });
     }
 
-    // 2. Revert wallet balance
-    let newBalance = trx.wallet.balance;
-    if (trx.type === "INCOME") {
-      newBalance -= trx.amount;
-    } else {
-      newBalance += trx.amount;
-    }
+    // =================================================
+    // SKENARIO 2: TRANSAKSI BIASA (SINGLE)
+    // =================================================
+    else {
+      const trx = await tx.transaction.findUnique({
+        where: { id },
+        include: { wallet: true },
+      });
 
-    // 3. Update wallet
-    if (newBalance < 0) {
-      throw Object.assign(new Error("Insufficient wallet balance"), { status: 400 });
-    }
-    await tx.wallet.update({
-      where: { id: trx.walletId },
-      data: { balance: newBalance },
-    });
+      let newBalance = trx.wallet.balance;
+      if (trx.type === "INCOME") {
+        newBalance -= trx.amount;
+      } else {
+        newBalance += trx.amount;
+      }
 
-    // 4. Delete transaction
-    return tx.transaction.delete({ where: { id } });
+      await tx.wallet.update({
+        where: { id: trx.walletId },
+        data: { balance: newBalance },
+      });
+
+      return tx.transaction.delete({ where: { id } });
+    }
   });
 };
 
@@ -295,5 +331,3 @@ exports.updateReceipt = async (id, receiptUrl) => {
     data: { attachmentUrl: receiptUrl },
   });
 };
-
-

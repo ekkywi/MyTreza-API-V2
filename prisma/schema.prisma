@@ -118,6 +118,10 @@ model Transaction {
   // RELATION FIXED: add name "TransactionCategory"
   category Category? @relation(fields: [categoryId], references: [id])
 
+ // Pastikan field ini ada dan tambahkan onDelete: Cascade
+  transferId    String?
+  transfer      Transfer? @relation(fields: [transferId], references: [id], onDelete: Cascade)
+
   @@index([userId, date])
   @@index([userId, type])
   @@index([userId, walletId])
@@ -136,6 +140,9 @@ model Transfer {
 
   // RELATION FIXED: add name "UserTransfers"
   user User @relation("UserTransfers", fields: [userId], references: [id])
+
+  // Relasi balik (otomatis ditambahkan Prisma biasanya)
+  transactions  Transaction[]
 
   fromWallet Wallet @relation("fromWallet", fields: [fromWalletId], references: [id])
   toWallet   Wallet @relation("toWallet", fields: [toWalletId], references: [id])

@@ -12,6 +12,7 @@ const {
   handleImageUpload,
 } = require("../../infrastructure/upload/localUploader");
 
+router.get("/me", auth, userController.getProfile);
 router.get("/profile", auth, userController.getProfile);
 
 router.put(

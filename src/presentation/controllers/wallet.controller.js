@@ -51,10 +51,19 @@ exports.dailyStats = async (req, res, next) => {
 
 exports.detail = async (req, res, next) => {
   try {
-    const wallet = await walletService.detail(req.params.id);
-    return success(res, "Wallet detail", wallet);
-  } catch (err) {
-    next(err);
+    const { id } = req.params;
+    const userId = req.user.id; // Ambil ID user dari token
+
+    // Panggil service dengan parameter userId yang baru kita tambahkan
+    const result = await walletService.detail(id, userId);
+
+    // Kirim response (sesuaikan dengan helper success Anda)
+    // return success(res, "Wallet detail", result);
+    res
+      .status(200)
+      .json({ success: true, message: "Wallet detail", data: result });
+  } catch (error) {
+    next(error);
   }
 };
 

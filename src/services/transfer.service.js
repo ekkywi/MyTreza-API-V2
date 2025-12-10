@@ -59,7 +59,11 @@ exports.create = async (
     // Jika user belum punya, cari yang Global (System Default)
     if (!expenseCategory) {
       expenseCategory = await tx.category.findFirst({
-        where: { userId: null, type: "EXPENSE", name: { contains: "Transfer" } },
+        where: {
+          userId: null,
+          type: "EXPENSE",
+          name: { contains: "Transfer" },
+        },
       });
     }
 
@@ -136,8 +140,11 @@ exports.create = async (
         categoryId: expenseCategory.id, // ID Kategori Anti-Null
         type: "EXPENSE",
         amount: totalDeduction,
-        description: `Transfer ke ${to.name} ${fee > 0 ? '(+Biaya Admin)' : ''}`,
+        description: `Transfer ke ${to.name} ${
+          fee > 0 ? "(+Biaya Admin)" : ""
+        }`,
         date: transactionDate,
+        transferId: transferRecord.id,
       },
     });
 
@@ -151,6 +158,7 @@ exports.create = async (
         amount: transferAmount,
         description: `Transfer dari ${from.name}`,
         date: transactionDate,
+        transferId: transferRecord.id,
       },
     });
 
@@ -163,8 +171,8 @@ exports.list = ({ userId, page = 1, limit = 20 }) => {
   return prisma.transfer.findMany({
     where: { userId },
     include: {
-        fromWallet: { select: { name: true } }, // Include nama wallet biar enak dibaca di frontend
-        toWallet: { select: { name: true } }
+      fromWallet: { select: { name: true } }, // Include nama wallet biar enak dibaca di frontend
+      toWallet: { select: { name: true } },
     },
     skip,
     take: Number(limit),
