@@ -26,7 +26,19 @@ exports.create = async (userId, payload) => {
 
 exports.list = async (userId, { page = 1, limit = 20 } = {}) => {
   const skip = (page - 1) * limit;
-  const items = await walletRepo.findByUser(userId, { skip, take: limit });
+
+  const items = await prisma.wallet.findMany({
+    where: {
+      userId: userId,
+      isArchived: false,
+    },
+    skip: skip,
+    take: limit,
+    orderBy: {
+      createdAt: "desc",
+    },
+  });
+
   return { items };
 };
 
@@ -160,4 +172,34 @@ exports.getDailyStats = async (walletId, userId, { month, year } = {}) => {
   });
 
   return Object.values(dailyMap);
+};
+
+exports.archiveWallet = async (walletId, userId) => {
+  const wallet = await prisma.wallet.findFirst({
+    where: {
+      id: walletId,
+      userId: userId,
+    },
+  });
+
+  if (!wallet) {
+    throw new Error("Dompet tidak ditemukan atau bukan milik Anda.");
+  }
+
+  if (wallet.balance > 1) {
+    throw new Error(
+      "Gagal Arsip: Saldo dompet harus Rp 0. Silakan transfer sisa saldo ke dompet lain terlebih dahulu."
+    );
+  }
+
+  const updatedWallet = await prisma.wallet.update({
+    where: {
+      id: walletId,
+    },
+    data: {
+      isArchived: true,
+    },
+  });
+
+  return updatedWallet;
 };

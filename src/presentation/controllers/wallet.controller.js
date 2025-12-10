@@ -23,7 +23,6 @@ exports.list = async (req, res, next) => {
   }
 };
 
-
 exports.stats = async (req, res, next) => {
   try {
     const { month, year } = req.query;
@@ -61,7 +60,11 @@ exports.detail = async (req, res, next) => {
 
 exports.update = async (req, res, next) => {
   try {
-    const updated = await walletService.update(req.params.id, req.body, req.user.id);
+    const updated = await walletService.update(
+      req.params.id,
+      req.body,
+      req.user.id
+    );
     return success(res, "Wallet updated", updated);
   } catch (err) {
     next(err);
@@ -74,5 +77,22 @@ exports.remove = async (req, res, next) => {
     return success(res, "Wallet deleted", null, 200);
   } catch (err) {
     next(err);
+  }
+};
+
+exports.archive = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+
+    await walletService.archiveWallet(id, userId);
+
+    res.status(200).json({
+      success: true,
+      message: "Dompet berhasil diarsipkan",
+      data: null,
+    });
+  } catch (error) {
+    next(error);
   }
 };

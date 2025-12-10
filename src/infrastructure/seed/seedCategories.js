@@ -12,7 +12,7 @@ const defaultCategories = [
   { name: "Rumah Tangga", type: "EXPENSE", icon: "home" },
   { name: "Transfer Antar Wallet", type: "EXPENSE", icon: "swap_horiz" },
   { name: "Transfer Keluar", type: "EXPENSE", icon: "send" },
-  { name: "Lainnya", type: "EXPENSE", icon: "more_horiz" },
+  { name: "Lainnya (Pengeluaran)", type: "EXPENSE", icon: "more_horiz" },
 
   // INCOME CATEGORIES
   { name: "Gaji", type: "INCOME", icon: "work" },
@@ -20,7 +20,7 @@ const defaultCategories = [
   { name: "Freelance", type: "INCOME", icon: "laptop" },
   { name: "Penjualan", type: "INCOME", icon: "sell" },
   { name: "Transfer Antar Wallet", type: "INCOME", icon: "swap_horiz" },
-  { name: "Lainnya", type: "INCOME", icon: "more_horiz" },
+  { name: "Lainnya (Pemasukan)", type: "INCOME", icon: "more_horiz" },
 ];
 
 async function seedCategories() {

@@ -15,5 +15,6 @@ router.get("/:id/stats", auth, walletController.stats);
 router.get("/:id/stats/daily", auth, walletController.dailyStats);
 router.put("/:id", auth, validate(updateWalletSchema), walletController.update);
 router.delete("/:id", auth, walletController.remove);
+router.patch("/:id/archive", auth, walletController.archive);
 
 module.exports = router;
