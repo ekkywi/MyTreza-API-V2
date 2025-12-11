@@ -29,5 +29,5 @@ exports.searchTransactionSchema = Joi.object({
   minAmount: Joi.number().optional(),
   maxAmount: Joi.number().optional(),
   page: Joi.number().integer().min(1).optional(),
-  limit: Joi.number().integer().min(1).max(100).optional(),
+  limit: Joi.number().integer().min(1).max(1000).optional(),
 });
