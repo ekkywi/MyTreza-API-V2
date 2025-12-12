@@ -2,7 +2,14 @@ const categoryRepo = require("../repositories/category.repository");
 const prisma = require("../infrastructure/prismaClient");
 
 exports.create = async (userId, data) => {
-  return categoryRepo.create({ ...data, userId });
+  const categoryData = {
+    ...data,
+    userId,
+    icon: data.icon || "category",
+    color: data.color || "#000000",
+  };
+
+  return categoryRepo.create(categoryData);
 };
 
 exports.list = async (userId) => {

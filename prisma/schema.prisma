@@ -87,7 +87,8 @@ model Category {
   userId    String? // null = global
   name      String
   type      String
-  icon      String?
+  icon      String?  @default("category")
+  color     String?  @default("#000000")
   createdAt DateTime @default(now())
 
   // RELATION BACK TO USER
